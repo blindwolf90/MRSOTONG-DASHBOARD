@@ -14,11 +14,11 @@ const FALLBACK_REVIEWS = [
 ];
 
 const FALLBACK_SALES = [
-  { store: "KSL", target: 311893, actual: null, normalTarget: 311893, lowTarget: 260000 },
-  { store: "BI",  target: 269813, actual: null, normalTarget: 269813, lowTarget: 225000 },
-  { store: "KOM", target: 89125,  actual: null, normalTarget: 89125,  lowTarget: 74000  },
-  { store: "TEB", target: 193124, actual: null, normalTarget: 193124, lowTarget: 160000 },
-  { store: "MA",  target: 107673, actual: null, normalTarget: 107673, lowTarget: 90000  },
+  { store: "KSL", target: 311893, actual: 406768, normalTarget: 311893, lowTarget: 260000 },
+  { store: "BI",  target: 269813, actual: 261794, normalTarget: 269813, lowTarget: 225000 },
+  { store: "KOM", target: 89125,  actual: 135847, normalTarget: 89125,  lowTarget: 74000  },
+  { store: "TEB", target: 193124, actual: 220307, normalTarget: 193124, lowTarget: 160000 },
+  { store: "MA",  target: 107673, actual: 115357, normalTarget: 107673, lowTarget: 90000  },
 ];
 
 const FALLBACK_ROSTER = [
