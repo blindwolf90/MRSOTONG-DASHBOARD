@@ -402,7 +402,7 @@ export default function App() {
                           <div style={{ height:10, background:"#2a2520", borderRadius:3, overflow:"hidden" }}>
                             <div style={{ height:"100%", width:`${segFill}%`, background:statusColor, transition:"width 0.4s" }} />
                           </div>
-                          <div style={{ fontSize:7, color:"#4a4038", fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase", marginTop:4, textAlign:"center" }}>{s‌egLabels[seg]}</div>
+                          <div style={{ fontSize:7, color:"#4a4038", fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase", marginTop:4, textAlign:"center" }}>{segLabels[seg]}</div>
                         </div>
                       );
                     })}
