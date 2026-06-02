@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 
+const VERSION = "v2.0";
+
 const SHEETS_ID = "YOUR_GOOGLE_SHEETS_ID_HERE";
 const SHEETS_URL = (sheet) =>
   `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/gviz/tq?tqx=out:csv&sheet=${sheet}`;
 
-// ── Real Google Review data ──
 const FALLBACK_REVIEWS = [
   { store: "KSL", rating: 5.0, total: 2101 },
   { store: "BI", rating: 4.9, total: 1383 },
@@ -52,11 +53,48 @@ const FALLBACK_ONLINE = [
   { channel:"TikTok", target:20000, actual:null, orders:null },
 ];
 
-// ── Intelligence engine ──
+const OVERVIEW = {
+  totalSales: 971628,
+  totalNetProfit: 165875,
+  groupMargin: 17.1,
+  activeStores: 5,
+  source: "AutoCount 2026 Jan-May 月均 + 用户提供租金/人员 | 毛利 35%、佣金 2% | 净利不计总部/工厂分摊",
+  stores: [
+    { store:"KSL", name:"KSL (MR SOTONG)", sales:311893, netMargin:10.6, staffPct:6.2, occPct:13.5, safety:1.6 },
+    { store:"BI", name:"AEON Bukit Indah", sales:269813, netMargin:24.2, staffPct:4.6, occPct:5.4, safety:3.8 },
+    { store:"TEB", name:"AEON Tebrau", sales:193124, netMargin:20.1, staffPct:7.6, occPct:6.5, safety:2.7 },
+    { store:"MA", name:"Mount Austin", sales:107673, netMargin:12.8, staffPct:9.2, occPct:10.2, safety:1.7 },
+    { store:"KOM", name:"Komtar JBCC", sales:89125, netMargin:16.9, staffPct:8.1, occPct:8.2, safety:2.2 },
+  ],
+};
+
+const UPDATE_LOG = [
+  { v:"v2.0", date:"2026-06-02", changes:[
+    "新增「总览」分页：5 店成本 / 净利率 / 员工 vs 占用占比 / 安全倍数 (源自 Notion 成本分析)",
+    "新增版本号 + 更新日志",
+    "新增系统连接器 / 技能清单 (带编号)",
+  ]},
+  { v:"v1.1", date:"2026-06-01", changes:[
+    "在线渠道统一 TikTok 配色",
+    "Sales 页改版：target 放大置于店名旁、进度条按 10 天分段、销售额大字置右",
+    "录入真实六月 roster；员工警报仅在实际在岗低于最低人数时触发",
+  ]},
+  { v:"v1.0", date:"2026-06-01", changes:[
+    "首版上线：Alerts / Roster / Sales / Online / Reviews",
+  ]},
+];
+
+const SYSTEMS = [
+  { n:1, type:"Connector", name:"Notion — 数据中心 (Sales / Reviews / Roster DB)" },
+  { n:2, type:"Connector", name:"Google Sheets — 备份数据存储" },
+  { n:3, type:"Connector", name:"Google Drive — HR 排班表来源" },
+  { n:4, type:"Skill", name:"n8n_1 — 1 星评价即时邮件提醒 (每 6 小时)" },
+  { n:5, type:"Skill", name:"n8n_2 — 每日 Google Review 同步至 Notion (8AM)" },
+  { n:6, type:"Skill", name:"n8n_3 — 每月 e-dashboard 提醒 (1 号 9AM)" },
+];
+
 function generateAlerts(sales, roster, reviews) {
   const alerts = [];
-
-  // 1. Sales below target
   sales.forEach(d => {
     if (!d.actual) return;
     const pct = d.actual / d.target * 100;
@@ -85,15 +123,11 @@ function generateAlerts(sales, roster, reviews) {
       });
     }
   });
-
-  // 2. Staffing issues — only flag a store if ACTIVE headcount falls below its minimum.
-  //    Temporary cross-store ASST cover and PENDING new hires do NOT trigger alerts.
   const storeMinStaff = { KSL: 3, BI: 3, KOM: 2, MA: 2 };
   const stores = ["KSL","BI","KOM","MA"];
   stores.forEach(s => {
     const activeStaff = roster.filter(r => r.store === s && r.work > 0 && !r.notes?.includes("RESIGNED"));
     const min = storeMinStaff[s];
-
     if (activeStaff.length < min) {
       alerts.push({
         level: "URGENT", store: s,
@@ -107,8 +141,6 @@ function generateAlerts(sales, roster, reviews) {
       });
     }
   });
-
-  // 3. Low Google Reviews (auto handled by n8n — shown here if data present)
   reviews.forEach(r => {
     if (r.rating < 4.0) {
       alerts.push({
@@ -125,16 +157,17 @@ function generateAlerts(sales, roster, reviews) {
       });
     }
   });
-
   return alerts;
 }
 
 const storeNames = { KSL:"KSL Mall", BI:"Bukit Indah", TEB:"AEON Tebrau", KOM:"Komtar JBCC", MA:"Mount Austin" };
 const storeColors = { KSL:"#C8A97E", BI:"#A8C5A0", TEB:"#B8A0C8", KOM:"#9FB8C8", MA:"#C9A0A0" };
 const roleColors = { OM:"#C8A97E", AM:"#b89060", JE:"#7a7a8a", SP:"#6a6a7a", "—":"#3a3530" };
-// All online channels now share the TikTok colour.
 const TIKTOK_COLOR = "#69C9D0";
 const channelColors = { Shopee:TIKTOK_COLOR, Lazada:TIKTOK_COLOR, TikTok:TIKTOK_COLOR };
+
+function marginColor(p) { return p >= 18 ? "#A8C5A0" : p >= 12 ? "#C8A97E" : "#cc3333"; }
+function safetyColor(x) { return x >= 2.5 ? "#A8C5A0" : x >= 1.7 ? "#C8A97E" : "#cc3333"; }
 
 function Stars({ rating }) {
   const r = parseFloat(rating) || 0;
@@ -188,8 +221,32 @@ function AlertCard({ alert }) {
   );
 }
 
+function StatCard({ label, value, sub, color }) {
+  return (
+    <div style={{ background:"#1e1a16", borderRadius:3, padding:"12px 14px", border:"1px solid #2a2520" }}>
+      <div style={{ fontSize:8, color:"#4a4038", letterSpacing:1, textTransform:"uppercase" }}>{label}</div>
+      <div style={{ fontSize:20, color:color||"#f0e8dc", fontFamily:"monospace", fontWeight:"bold", marginTop:4 }}>{value}</div>
+      {sub && <div style={{ fontSize:8, color:"#6b5f52", fontFamily:"monospace", marginTop:2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function BarRow({ label, value, display, max, color }) {
+  return (
+    <div style={{ marginBottom:9 }}>
+      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+        <span style={{ fontSize:10, color:"#a89c8c", fontFamily:"monospace" }}>{label}</span>
+        <span style={{ fontSize:11, color:color, fontFamily:"monospace", fontWeight:"bold" }}>{display}</span>
+      </div>
+      <div style={{ height:8, background:"#2a2520", borderRadius:2 }}>
+        <div style={{ height:"100%", width:`${Math.max(2, Math.min(100, value/max*100))}%`, background:color, borderRadius:2 }} />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const [tab, setTab] = useState("alerts");
+  const [tab, setTab] = useState("overview");
   const [store, setStore] = useState("KSL");
   const [reviews, setReviews] = useState(FALLBACK_REVIEWS);
   const [sales, setSales] = useState(FALLBACK_SALES);
@@ -232,24 +289,28 @@ export default function App() {
   const todayStr = now.toLocaleDateString("zh-MY",{weekday:"short",year:"numeric",month:"short",day:"numeric",timeZone:"Asia/Kuala_Lumpur"});
   const totalOnlineTarget = online.reduce((s,o)=>s+(o.target||0),0);
   const totalOnlineActual = online.every(o=>o.actual!==null) ? online.reduce((s,o)=>s+(o.actual||0),0) : null;
+  const maxSales = Math.max(...OVERVIEW.stores.map(s=>s.sales));
+  const maxCostPct = Math.max(...OVERVIEW.stores.map(s=>Math.max(s.staffPct, s.occPct)));
+  const maxSafety = Math.max(...OVERVIEW.stores.map(s=>s.safety));
 
   const tabs = [
+    { id:"overview", label:"总览" },
     { id:"alerts", label:`Alerts${urgent>0?` 🚨${urgent}`:""}` },
     { id:"roster", label:"Roster" },
     { id:"sales", label:"Sales" },
     { id:"online", label:"Online" },
     { id:"reviews", label:"Reviews" },
+    { id:"log", label:"Update Log" },
   ];
 
   return (
     <div style={{ background:"#1a1612", minHeight:"100vh", fontFamily:"Georgia,serif", color:"#e8e0d4" }}>
 
-      {/* Header */}
       <div style={{ background:"#141210", borderBottom:"1px solid #2a2520", padding:"14px 18px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
           <div>
             <div style={{ fontSize:9, color:"#C8A97E", letterSpacing:4, textTransform:"uppercase", fontFamily:"monospace" }}>Malaysian Heritage Brands Group</div>
-            <div style={{ fontSize:22, fontWeight:"bold", color:"#f0e8dc", marginTop:2 }}>Operations Dashboard</div>
+            <div style={{ fontSize:22, fontWeight:"bold", color:"#f0e8dc", marginTop:2 }}>Operations Dashboard <span style={{ fontSize:11, color:"#6b5f52", fontFamily:"monospace", fontWeight:"normal" }}>{VERSION}</span></div>
             <div style={{ fontSize:10, color:"#4a4038", fontFamily:"monospace", marginTop:2 }}>{todayStr}</div>
           </div>
           <div style={{ textAlign:"right" }}>
@@ -259,7 +320,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Store selector */}
         <div style={{ display:"flex", gap:8, marginTop:14, overflowX:"auto" }}>
           {Object.keys(storeNames).map(s => (
             <button key={s} onClick={()=>setStore(s)} style={{
@@ -275,7 +335,6 @@ export default function App() {
 
       <div style={{ padding:"14px 18px", maxWidth:860 }}>
 
-        {/* Tab nav */}
         <div style={{ display:"flex", borderBottom:"1px solid #2a2520", marginBottom:14, overflowX:"auto" }}>
           {tabs.map(t => (
             <button key={t.id} onClick={()=>setTab(t.id)} style={{
@@ -288,7 +347,79 @@ export default function App() {
           ))}
         </div>
 
-        {/* ── ALERTS TAB ── */}
+        {/* OVERVIEW TAB */}
+        {tab==="overview" && (
+          <div>
+            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>
+              门店总览 · Cost & Profit
+            </div>
+            <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginBottom:14, lineHeight:1.5 }}>{OVERVIEW.source}</div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
+              <StatCard label="5 店月销售合计" value={`RM ${(OVERVIEW.totalSales/1000).toFixed(0)}k`} sub="月均" color="#f0e8dc" />
+              <StatCard label="月净利合计" value={`RM ${(OVERVIEW.totalNetProfit/1000).toFixed(0)}k`} sub="扣 AM 后" color="#A8C5A0" />
+              <StatCard label="集团净利率" value={`${OVERVIEW.groupMargin}%`} sub="扣 AM 后" color="#A8C5A0" />
+              <StatCard label="活跃门店" value={OVERVIEW.activeStores} sub="A · B · C 级" color="#9FB8C8" />
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:12 }}>月均销售 (RM)</div>
+                {OVERVIEW.stores.map(s=>(
+                  <BarRow key={s.store} label={s.name} value={s.sales} display={`${(s.sales/1000).toFixed(0)}k`} max={maxSales} color={storeColors[s.store]} />
+                ))}
+              </div>
+
+              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:12 }}>净利率 % (扣 AM 后)</div>
+                {OVERVIEW.stores.map(s=>(
+                  <BarRow key={s.store} label={s.name} value={s.netMargin} display={`${s.netMargin}%`} max={26} color={marginColor(s.netMargin)} />
+                ))}
+              </div>
+
+              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:6 }}>员工占比 vs 占用占比 (% 销售)</div>
+                <div style={{ display:"flex", gap:14, marginBottom:10 }}>
+                  <span style={{ fontSize:9, color:"#9FB8C8", fontFamily:"monospace" }}>■ 员工</span>
+                  <span style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace" }}>■ 占用(租金等)</span>
+                </div>
+                {OVERVIEW.stores.map(s=>(
+                  <div key={s.store} style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, color:"#a89c8c", fontFamily:"monospace", marginBottom:3 }}>{s.name}</div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                      <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:2 }}><div style={{ height:"100%", width:`${s.staffPct/maxCostPct*100}%`, background:"#9FB8C8", borderRadius:2 }} /></div>
+                      <span style={{ fontSize:9, color:"#9FB8C8", fontFamily:"monospace", width:34, textAlign:"right" }}>{s.staffPct}%</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:2 }}><div style={{ height:"100%", width:`${s.occPct/maxCostPct*100}%`, background:"#C8A97E", borderRadius:2 }} /></div>
+                      <span style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace", width:34, textAlign:"right" }}>{s.occPct}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:4 }}>安全倍数 (月均 ÷ 损益平衡线)</div>
+                <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginBottom:12 }}>越高越安全 · 1.0 = 刚好打平</div>
+                {OVERVIEW.stores.map(s=>(
+                  <BarRow key={s.store} label={s.name} value={s.safety} display={`${s.safety}x`} max={maxSafety} color={safetyColor(s.safety)} />
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop:14, padding:"10px 14px", background:"#1a1612", border:"1px dashed #2a2520", borderRadius:3 }}>
+              <div style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>关键洞察</div>
+              <div style={{ fontSize:10, color:"#a89c8c", lineHeight:1.7 }}>
+                • 成本压力不在薪酬 (员工仅 ~5–9%),而在毛利偏低 (35%) + 租金。<br/>
+                • KSL 销售最大但净利率最低 (10.6%):租金 13.5% 拖累 — 冲量摊薄租金是关键。<br/>
+                • Bukit Indah 最精简 (员工 4.6%、安全 3.8x、净利 24.2%),是人效标杆。<br/>
+                • KSL 安全倍数仅 1.6x,缓冲最薄,淡季需特别盯。
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ALERTS TAB */}
         {tab==="alerts" && (
           <div>
             {alerts.length === 0 ? (
@@ -317,7 +448,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ── ROSTER TAB ── */}
+        {/* ROSTER TAB */}
         {tab==="roster" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>
@@ -357,7 +488,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ── SALES TAB ── */}
+        {/* SALES TAB */}
         {tab==="sales" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
@@ -367,11 +498,9 @@ export default function App() {
               const pct = d.actual ? Math.round(d.actual/d.target*100) : null;
               const statusColor = !pct ? "#3a3530" : pct>=100 ? "#A8C5A0" : pct>=85 ? "#C8A97E" : "#cc3333";
               const frac = d.actual ? d.actual/d.target : 0;
-              const segLabels = ["Day 1–10","Day 11–20","Day 21–30"];
+              const segLabels = ["Day 1-10","Day 11-20","Day 21-30"];
               return (
                 <div key={d.store} style={{ background:"#1e1a16", border:`1px solid ${store===d.store?storeColors[d.store]+"44":"#2a2520"}`, borderRadius:3, padding:"16px 18px", marginBottom:10 }}>
-
-                  {/* Top row: store name + TARGET (left, enlarged) | ACTUAL SALES (far right, big) */}
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap", marginBottom:16 }}>
                     <div>
                       <div style={{ fontSize:10, color:storeColors[d.store], fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:5 }}>{d.store} — {storeNames[d.store]}</div>
@@ -385,15 +514,13 @@ export default function App() {
                       {d.actual ? (
                         <>
                           <div style={{ fontSize:30, color:statusColor, fontFamily:"monospace", fontWeight:"bold", lineHeight:1.15 }}>RM {d.actual.toLocaleString()}</div>
-                        <div style={{ fontSize:13, color:statusColor, fontFamily:"monospace", fontWeight:"bold" }}>{pct}% of target</div>
+                          <div style={{ fontSize:13, color:statusColor, fontFamily:"monospace", fontWeight:"bold" }}>{pct}% of target</div>
                         </>
                       ) : (
-                        <div style={{ fontSize:14, color:"#3a3530", fontFamily:"monospace", marginTop:4 }}>— pending —</div>
+                        <div style={{ fontSize:14, color:"#3a3530", fontFamily:"monospace", marginTop:4 }}>- pending -</div>
                       )}
                     </div>
                   </div>
-
-                  {/* 10-day segmented progress bar (Day 1–10 / 11–20 / 21–30) */}
                   <div style={{ display:"flex", gap:4 }}>
                     {[0,1,2].map(seg=>{
                       const segFill = Math.max(0, Math.min(100, (frac*3 - seg)*100));
@@ -407,7 +534,6 @@ export default function App() {
                       );
                     })}
                   </div>
-
                   {pct!==null && pct < 85 && (
                     <div style={{ fontSize:10, color:"#c87040", marginTop:8, fontFamily:"monospace" }}>
                       ⚠ RM {(d.target-d.actual).toLocaleString()} behind — see Alerts tab for recommendations
@@ -422,14 +548,12 @@ export default function App() {
           </div>
         )}
 
-        {/* ── ONLINE SALES TAB ── */}
+        {/* ONLINE TAB */}
         {tab==="online" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
               Online Channels — June 2026
             </div>
-
-            {/* Channel cards — all channels share the TikTok colour */}
             {online.map(o=>{
               const pct = o.actual ? Math.round(o.actual/o.target*100) : null;
               const c = channelColors[o.channel] || TIKTOK_COLOR;
@@ -464,8 +588,6 @@ export default function App() {
                 </div>
               );
             })}
-
-            {/* Total online summary */}
             <div style={{ background:"#141210", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px", marginTop:4 }}>
               <div style={{ display:"flex", justifyContent:"space-between" }}>
                 <span style={{ fontSize:10, color:"#6b5f52", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase" }}>Total Online</span>
@@ -475,20 +597,10 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            <div style={{ marginTop:14, padding:"10px 14px", background:"#1a1612", border:"1px dashed #2a2520", borderRadius:3 }}>
-              <div style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>How to sync online sales</div>
-              <div style={{ fontSize:10, color:"#6b5f52", lineHeight:1.8 }}>
-                • Shopee → Seller Centre → Orders → Export CSV → Paste into ONLINE_SALES sheet<br/>
-                • Lazada → Seller Centre → Finance → Revenue → Export → Paste totals<br/>
-                • TikTok Shop → Seller Centre → Finance → Revenue Report → Paste totals<br/>
-                • n8n can automate this — configure after Sheets is connected
-              </div>
-            </div>
           </div>
         )}
 
-        {/* ── REVIEWS TAB ── */}
+        {/* REVIEWS TAB */}
         {tab==="reviews" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
@@ -516,23 +628,52 @@ export default function App() {
                 </div>
               </div>
             ))}
-            <div style={{ marginTop:8, padding:"10px 14px", background:"#1a1612", border:"1px dashed #2a2520", borderRadius:3 }}>
-              <div style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>Email Alert Rule (via n8n)</div>
-              <div style={{ fontSize:10, color:"#6b5f52", lineHeight:1.8 }}>
-                • New 1-star review detected → Instant email to mitosjie90@gmail.com<br/>
-                • Email includes: store name, reviewer name, review text, date<br/>
-                • n8n checks every 6 hours via Google Places API
-              </div>
-            </div>
           </div>
         )}
 
-        {/* ── SUMMARY STRIP ── */}
+        {/* UPDATE LOG TAB */}
+        {tab==="log" && (
+          <div>
+            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
+              更新日志 · Update Log — Current {VERSION}
+            </div>
+            {UPDATE_LOG.map(rel=>(
+              <div key={rel.v} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderLeft:`3px solid ${rel.v===VERSION?"#A8C5A0":"#4a4038"}`, borderRadius:3, padding:"12px 16px", marginBottom:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                  <span style={{ fontSize:14, color:rel.v===VERSION?"#A8C5A0":"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>{rel.v}{rel.v===VERSION?"  ← current":""}</span>
+                  <span style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace" }}>{rel.date}</span>
+                </div>
+                {rel.changes.map((c,i)=>(
+                  <div key={i} style={{ display:"flex", gap:8, marginBottom:5 }}>
+                    <span style={{ color:"#C8A97E", fontFamily:"monospace", fontSize:11, flexShrink:0 }}>+</span>
+                    <span style={{ fontSize:11, color:"#c8b898", lineHeight:1.5 }}>{c}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", margin:"18px 0 10px" }}>
+              系统连接器 / 技能 · Connectors & Skills
+            </div>
+            {SYSTEMS.map(sys=>(
+              <div key={sys.n} style={{ display:"flex", alignItems:"center", gap:10, background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"9px 14px", marginBottom:6 }}>
+                <span style={{ fontSize:12, color:"#C8A97E", fontFamily:"monospace", fontWeight:"bold", width:18 }}>{sys.n}</span>
+                <span style={{ fontSize:9, padding:"2px 7px", borderRadius:2, fontFamily:"monospace", letterSpacing:1,
+                  background: sys.type==="Connector" ? "#9FB8C822" : "#A8C5A022",
+                  color: sys.type==="Connector" ? "#9FB8C8" : "#A8C5A0",
+                  border: `1px solid ${sys.type==="Connector" ? "#9FB8C844" : "#A8C5A044"}` }}>{sys.type}</span>
+                <span style={{ fontSize:11, color:"#c8b898", fontFamily:"monospace" }}>{sys.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Summary strip */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginTop:20, borderTop:"1px solid #2a2520", paddingTop:16 }}>
           {[
             { label:"Active Alerts", val:alerts.length, color: alerts.length>0?"#cc3333":"#A8C5A0" },
             { label:"Avg Review", val:"4.9 ⭐", color:"#C8A97E" },
-            { label:"Online Channels", val:"3", color:"#9FB8C8" },
+            { label:"Group Net Margin", val:`${OVERVIEW.groupMargin}%`, color:"#A8C5A0" },
             { label:"Jun Target (Retail)", val:"RM 971K", color:"#A8C5A0" },
           ].map(s=>(
             <div key={s.label} style={{ background:"#1e1a16", borderRadius:3, padding:"10px 12px", border:"1px solid #2a2520" }}>
