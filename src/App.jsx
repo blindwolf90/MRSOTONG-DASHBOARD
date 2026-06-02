@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 const VERSION = "v2.1";
 
 // Access tiers (UI-level gate; not hardened security — data still ships in bundle)
-const ADMIN_PASS = "sotong-admin-2026";  // Arthur + wife: full access
+const ADMIN_PASS = "rubytan91blindwolf90";  // Arthur + wife: full access
 const VIEW_PASS = "sotong-team";         // staff/others: limited view
 
 const SHEETS_ID = "YOUR_GOOGLE_SHEETS_ID_HERE";
@@ -272,10 +272,10 @@ function Login({ onAuth }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem("ms_role")==="viewer" ? "alerts" : "overview"; } catch(e){ return "overview"; } });
-  const [role, setRole] = useState(() => { try { return sessionStorage.getItem("ms_role"); } catch(e){ return null; } });
-  const setAuth = (r) => { try { sessionStorage.setItem("ms_role", r); } catch(e){} if (r==="viewer") setTab("alerts"); setRole(r); };
-  const logout = () => { try { sessionStorage.removeItem("ms_role"); } catch(e){} setRole(null); };
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem("ms_role")==="viewer" ? "alerts" : "overview"; } catch(e){ return "overview"; } });
+  const [role, setRole] = useState(() => { try { return localStorage.getItem("ms_role"); } catch(e){ return null; } });
+  const setAuth = (r) => { try { localStorage.setItem("ms_role", r); } catch(e){} if (r==="viewer") setTab("alerts"); setRole(r); };
+  const logout = () => { try { localStorage.removeItem("ms_role"); } catch(e){} setRole(null); };
   const isAdmin = role === "admin";
   const [store, setStore] = useState("KSL");
   const [reviews, setReviews] = useState(FALLBACK_REVIEWS);
