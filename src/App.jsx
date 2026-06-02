@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 
-const VERSION = "v2.0";
+const VERSION = "v2.1";
+
+// Access tiers (UI-level gate; not hardened security — data still ships in bundle)
+const ADMIN_PASS = "sotong-admin-2026";  // Arthur + wife: full access
+const VIEW_PASS = "sotong-team";         // staff/others: limited view
 
 const SHEETS_ID = "YOUR_GOOGLE_SHEETS_ID_HERE";
 const SHEETS_URL = (sheet) =>
@@ -245,8 +249,34 @@ function BarRow({ label, value, display, max, color }) {
   );
 }
 
+function Login({ onAuth }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState(false);
+  const submit = () => {
+    if (pw === ADMIN_PASS) onAuth("admin");
+    else if (pw === VIEW_PASS) onAuth("viewer");
+    else setErr(true);
+  };
+  return (
+    <div style={{ background:"#1a1612", minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Georgia,serif" }}>
+      <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:6, padding:"32px 28px", width:300 }}>
+        <div style={{ fontSize:9, color:"#C8A97E", letterSpacing:4, textTransform:"uppercase", fontFamily:"monospace" }}>Mr Sotong</div>
+        <div style={{ fontSize:18, color:"#f0e8dc", fontWeight:"bold", marginTop:4, marginBottom:18 }}>Operations Dashboard</div>
+        <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr(false);}} onKeyDown={e=>{if(e.key==="Enter")submit();}} placeholder="输入密码 password"
+          style={{ width:"100%", boxSizing:"border-box", padding:"10px 12px", background:"#141210", border:`1px solid ${err?"#cc3333":"#2a2520"}`, borderRadius:3, color:"#e8e0d4", fontFamily:"monospace", fontSize:13 }} />
+        {err && <div style={{ fontSize:10, color:"#cc3333", fontFamily:"monospace", marginTop:6 }}>密码错误 wrong password</div>}
+        <button onClick={submit} style={{ width:"100%", marginTop:14, padding:"10px", background:"#C8A97E22", border:"1px solid #C8A97E", borderRadius:3, color:"#C8A97E", fontFamily:"monospace", fontSize:12, letterSpacing:2, textTransform:"uppercase", cursor:"pointer" }}>进入 Enter</button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(() => { try { return sessionStorage.getItem("ms_role")==="viewer" ? "alerts" : "overview"; } catch(e){ return "overview"; } });
+  const [role, setRole] = useState(() => { try { return sessionStorage.getItem("ms_role"); } catch(e){ return null; } });
+  const setAuth = (r) => { try { sessionStorage.setItem("ms_role", r); } catch(e){} if (r==="viewer") setTab("alerts"); setRole(r); };
+  const logout = () => { try { sessionStorage.removeItem("ms_role"); } catch(e){} setRole(null); };
+  const isAdmin = role === "admin";
   const [store, setStore] = useState("KSL");
   const [reviews, setReviews] = useState(FALLBACK_REVIEWS);
   const [sales, setSales] = useState(FALLBACK_SALES);
@@ -293,7 +323,7 @@ export default function App() {
   const maxCostPct = Math.max(...OVERVIEW.stores.map(s=>Math.max(s.staffPct, s.occPct)));
   const maxSafety = Math.max(...OVERVIEW.stores.map(s=>s.safety));
 
-  const tabs = [
+  const tabs = isAdmin ? [
     { id:"overview", label:"总览" },
     { id:"alerts", label:`Alerts${urgent>0?` 🚨${urgent}`:""}` },
     { id:"roster", label:"Roster" },
@@ -301,7 +331,12 @@ export default function App() {
     { id:"online", label:"Online" },
     { id:"reviews", label:"Reviews" },
     { id:"log", label:"Update Log" },
+  ] : [
+    { id:"alerts", label:`紧急事项${urgent>0?` 🚨${urgent}`:""}` },
+    { id:"sales", label:"达标程度" },
   ];
+
+  if (!role) return <Login onAuth={setAuth} />;
 
   return (
     <div style={{ background:"#1a1612", minHeight:"100vh", fontFamily:"Georgia,serif", color:"#e8e0d4" }}>
@@ -317,6 +352,7 @@ export default function App() {
             {loading && <div style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace" }}>⟳ Syncing...</div>}
             {urgent > 0 && <div style={{ fontSize:11, color:"#cc3333", fontFamily:"monospace", fontWeight:"bold" }}>🚨 {urgent} URGENT</div>}
             <div style={{ fontSize:8, color:"#3a3530", fontFamily:"monospace", marginTop:4 }}>Sync: {lastSync}</div>
+            <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginTop:4 }}>{isAdmin?"管理员 Admin":"访客 Viewer"} · <span onClick={logout} style={{ color:"#C8A97E", cursor:"pointer" }}>登出</span></div>
           </div>
         </div>
 
@@ -348,7 +384,7 @@ export default function App() {
         </div>
 
         {/* OVERVIEW TAB */}
-        {tab==="overview" && (
+        {isAdmin && tab==="overview" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>
               门店总览 · Cost & Profit
@@ -449,7 +485,7 @@ export default function App() {
         )}
 
         {/* ROSTER TAB */}
-        {tab==="roster" && (
+        {isAdmin && tab==="roster" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>
               {storeNames[store]} — June 2026
@@ -488,8 +524,8 @@ export default function App() {
           </div>
         )}
 
-        {/* SALES TAB */}
-        {tab==="sales" && (
+        {/* SALES TAB (admin: full) */}
+        {isAdmin && tab==="sales" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
               Retail Sales — June 2026
@@ -548,8 +584,35 @@ export default function App() {
           </div>
         )}
 
+        {/* SALES (viewer: achievement only, no RM) */}
+        {!isAdmin && tab==="sales" && (
+          <div>
+            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
+              达标程度 · Sales Achievement — June 2026
+            </div>
+            {sales.map(d=>{
+              const pct = d.actual ? Math.round(d.actual/d.target*100) : null;
+              const c = !pct ? "#3a3530" : pct>=100 ? "#A8C5A0" : pct>=85 ? "#C8A97E" : "#cc3333";
+              const status = !pct ? "待更新" : pct>=100 ? "达标" : pct>=85 ? "接近" : "落后";
+              return (
+                <div key={d.store} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px", marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                    <span style={{ fontSize:11, color:storeColors[d.store], fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase" }}>{d.store} — {storeNames[d.store]}</span>
+                    <span style={{ fontSize:22, color:c, fontFamily:"monospace", fontWeight:"bold" }}>{pct!==null?`${pct}%`:"—"}</span>
+                  </div>
+                  <div style={{ height:8, background:"#2a2520", borderRadius:3 }}>
+                    <div style={{ height:"100%", width:`${pct?Math.min(pct,100):0}%`, background:c, borderRadius:3 }} />
+                  </div>
+                  <div style={{ fontSize:10, color:c, fontFamily:"monospace", marginTop:6 }}>{status}</div>
+                </div>
+              );
+            })}
+            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", marginTop:8 }}>仅显示达标程度;详细财务需管理员权限</div>
+          </div>
+        )}
+
         {/* ONLINE TAB */}
-        {tab==="online" && (
+        {isAdmin && tab==="online" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
               Online Channels — June 2026
@@ -601,7 +664,7 @@ export default function App() {
         )}
 
         {/* REVIEWS TAB */}
-        {tab==="reviews" && (
+        {isAdmin && tab==="reviews" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
               Google Reviews — 5 Outlets — Auto-synced Daily
@@ -632,7 +695,7 @@ export default function App() {
         )}
 
         {/* UPDATE LOG TAB */}
-        {tab==="log" && (
+        {isAdmin && tab==="log" && (
           <div>
             <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>
               更新日志 · Update Log — Current {VERSION}
@@ -668,7 +731,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Summary strip */}
+        {/* Summary strip (admin only — financials) */}
+        {isAdmin && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginTop:20, borderTop:"1px solid #2a2520", paddingTop:16 }}>
           {[
             { label:"Active Alerts", val:alerts.length, color: alerts.length>0?"#cc3333":"#A8C5A0" },
@@ -682,6 +746,7 @@ export default function App() {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );
