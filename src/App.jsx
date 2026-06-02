@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const VERSION = "v2.1";
+const VERSION = "v2.2";
 
 // Access tiers (UI-level gate; not hardened security — data still ships in bundle)
 const ADMIN_PASS = "rubytan91blindwolf90";  // Arthur + wife: full access
@@ -252,6 +252,7 @@ function BarRow({ label, value, display, max, color }) {
 function Login({ onAuth }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState(false);
+  const [show, setShow] = useState(false);
   const submit = () => {
     if (pw === ADMIN_PASS) onAuth("admin");
     else if (pw === VIEW_PASS) onAuth("viewer");
@@ -262,8 +263,11 @@ function Login({ onAuth }) {
       <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:6, padding:"32px 28px", width:300 }}>
         <div style={{ fontSize:9, color:"#C8A97E", letterSpacing:4, textTransform:"uppercase", fontFamily:"monospace" }}>Mr Sotong</div>
         <div style={{ fontSize:18, color:"#f0e8dc", fontWeight:"bold", marginTop:4, marginBottom:18 }}>Operations Dashboard</div>
-        <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr(false);}} onKeyDown={e=>{if(e.key==="Enter")submit();}} placeholder="输入密码 password"
-          style={{ width:"100%", boxSizing:"border-box", padding:"10px 12px", background:"#141210", border:`1px solid ${err?"#cc3333":"#2a2520"}`, borderRadius:3, color:"#e8e0d4", fontFamily:"monospace", fontSize:13 }} />
+        <div style={{ position:"relative" }}>
+          <input type={show?"text":"password"} value={pw} onChange={e=>{setPw(e.target.value);setErr(false);}} onKeyDown={e=>{if(e.key==="Enter")submit();}} placeholder="输入密码 password"
+            style={{ width:"100%", boxSizing:"border-box", padding:"10px 40px 10px 12px", background:"#141210", border:`1px solid ${err?"#cc3333":"#2a2520"}`, borderRadius:3, color:"#e8e0d4", fontFamily:"monospace", fontSize:13 }} />
+          <span onClick={()=>setShow(!show)} title="显示 / 隐藏密码" style={{ position:"absolute", right:11, top:"50%", transform:"translateY(-50%)", cursor:"pointer", fontSize:15, userSelect:"none", opacity:0.8 }}>{show?"🙈":"👁"}</span>
+        </div>
         {err && <div style={{ fontSize:10, color:"#cc3333", fontFamily:"monospace", marginTop:6 }}>密码错误 wrong password</div>}
         <button onClick={submit} style={{ width:"100%", marginTop:14, padding:"10px", background:"#C8A97E22", border:"1px solid #C8A97E", borderRadius:3, color:"#C8A97E", fontFamily:"monospace", fontSize:12, letterSpacing:2, textTransform:"uppercase", cursor:"pointer" }}>进入 Enter</button>
       </div>
