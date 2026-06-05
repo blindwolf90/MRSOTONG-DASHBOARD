@@ -1,20 +1,23 @@
 // api/notion-data.js - Vercel serverless function
 // Reads live sales from the Notion "Sales Data" database so the dashboard
-// always shows the latest numbers the nightly scrape writes into Notion.
+// always shows the latest month the nightly scrape writes into Notion.
 
 const SALES_DB = "2986bd13-3e67-4cc1-a6f5-eead3e716837";
-
-// Fallback monthly targets per store (used if a row has no Target set).
 const TARGETS = { KSL: 311893, BI: 269813, TEB: 193124, KOM: 89125, MA: 107673 };
+const MONTHS = { january:1, february:2, march:3, april:4, may:5, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
+function monthKey(m) {
+  const parts = String(m || "").trim().toLowerCase().split(/\s+/);
+  const mo = MONTHS[parts[0]] || 0;
+  const yr = parseInt(parts[1], 10) || 0;
+  return yr * 100 + mo;
+}
 
 export default async function handler(req, res) {
   const token = process.env.NOTION_TOKEN;
   res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
-
   if (!token) {
     return res.status(500).json({ error: "NOTION_TOKEN not configured" });
   }
-
   try {
     const r = await fetch(
       `https://api.notion.com/v1/databases/${SALES_DB}/query`,
@@ -39,15 +42,16 @@ export default async function handler(req, res) {
           store: props.Store?.select?.name || "",
           actual: props.Actual?.number ?? null,
           target: props.Target?.number ?? null,
-          edited: p.last_edited_time,
         };
       })
       .filter((x) => x.store);
 
+    // Pick the row with the latest Month per store (e.g. "June 2026").
     const latest = {};
     for (const row of rows) {
-      if (!latest[row.store] || row.edited > latest[row.store].edited) {
-        latest[row.store] = row;
+      const k = monthKey(row.month);
+      if (!latest[row.store] || k > latest[row.store]._k) {
+        latest[row.store] = Object.assign({ _k: k }, row);
       }
     }
 
