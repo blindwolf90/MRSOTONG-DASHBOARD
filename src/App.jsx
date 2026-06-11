@@ -1,7 +1,6 @@
 import { useState } from "react";
-import Battle from "./Battle";
 
-const VERSION = "v2.4";
+const VERSION = "v2.6.1";
 
 const ADMIN_PASS = "rubytan91blindwolf90";
 const VIEW_PASS = "sotong-team";
@@ -213,8 +212,8 @@ function Login({ onAuth }) {
 export default function App() {
   const [role, setRole] = useState(() => { try { return localStorage.getItem("ms_role"); } catch(e){ return null; } });
   const isAdmin = role === "admin";
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem("ms_role")==="viewer" ? "alerts" : "battle"; } catch(e){ return "battle"; } });
-  const setAuth = (r) => { try { localStorage.setItem("ms_role", r); } catch(e){} setTab(r==="viewer"?"alerts":"battle"); setRole(r); };
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem("ms_role")==="viewer" ? "alerts" : "overview"; } catch(e){ return "overview"; } });
+  const setAuth = (r) => { try { localStorage.setItem("ms_role", r); } catch(e){} setTab(r==="viewer"?"alerts":"overview"); setRole(r); };
   const logout = () => { try { localStorage.removeItem("ms_role"); } catch(e){} setRole(null); };
   const [brand, setBrand] = useState("sotong");
   const [store, setStore] = useState("KSL");
@@ -234,7 +233,6 @@ export default function App() {
   const maxSafety = Math.max(...OVERVIEW.stores.map(s=>s.safety));
 
   const tabs = isAdmin ? [
-    { id:"battle", label:"战报" },
     { id:"overview", label:"总览" },
     { id:"alerts", label:`Alerts${urgent>0?` 🚨${urgent}`:""}` },
     { id:"roster", label:"Roster" },
@@ -289,7 +287,6 @@ export default function App() {
           ))}
         </div>
 
-        {isAdmin && tab==="battle" && <Battle />}
 
         {isAdmin && tab==="overview" && (
           <div>
