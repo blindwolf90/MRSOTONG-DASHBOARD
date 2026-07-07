@@ -1,6 +1,7 @@
 import { useState } from "react";
+import packageJson from "../package.json";
 
-const VERSION = "v2.6.1";
+const VERSION = `v${packageJson.version}`;
 
 const ADMIN_PASS = "rubytan91blindwolf90";
 const VIEW_PASS = "sotong-team";
