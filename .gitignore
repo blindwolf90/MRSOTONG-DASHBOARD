@@ -1,0 +1,28 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# Build and dependency output
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+
+# Local Codex working folders
+work/
+outputs/
+
