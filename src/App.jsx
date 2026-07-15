@@ -1,5 +1,6 @@
 import { useState } from "react";
 import packageJson from "../package.json";
+import Live from "./Live.jsx";
 
 const VERSION = `v${packageJson.version}`;
 
@@ -66,6 +67,11 @@ const OVERVIEW = {
 };
 
 const UPDATE_LOG = [
+  { v:"v2.7.0", date:"2026-07-15", changes:[
+    "新增「实时 LIVE」默认页：Group Sales / Monthly Target / Achievement / 三品牌 / Store Ranking，全部数据来自 n8n Data API v1.0（实时读 Google Sheet Daily Sales，零硬编码）",
+    "支持 /live 直达路径；每 5 分钟自动刷新 + 手动刷新 + cache-buster 防旧缓存",
+    "旧页面零改动；总览/SALES 页历史数字为 Jan-May 静态基线，实时数据一律看 LIVE 页",
+  ]},
   { v:"v2.4", date:"2026-06-03", changes:[
     "新增「战报」游戏页:每家店是 Q 版装甲战士,鱿鱼先生吉祥物 = 每日小怪,销售即伤害",
     "新增品牌切换器;在线销售独立成第六位置;Logo 放到底部",
@@ -213,8 +219,13 @@ function Login({ onAuth }) {
 export default function App() {
   const [role, setRole] = useState(() => { try { return localStorage.getItem("ms_role"); } catch(e){ return null; } });
   const isAdmin = role === "admin";
-  const [tab, setTab] = useState(() => { try { return localStorage.getItem("ms_role")==="viewer" ? "alerts" : "overview"; } catch(e){ return "overview"; } });
-  const setAuth = (r) => { try { localStorage.setItem("ms_role", r); } catch(e){} setTab(r==="viewer"?"alerts":"overview"); setRole(r); };
+  const [tab, setTab] = useState(() => {
+    try {
+      if (typeof window !== "undefined" && window.location.pathname === "/live") return "live";
+      return "live"; // v2.7.0: LIVE 实时页为默认页
+    } catch(e){ return "live"; }
+  });
+  const setAuth = (r) => { try { localStorage.setItem("ms_role", r); } catch(e){} setTab("live"); setRole(r); };
   const logout = () => { try { localStorage.removeItem("ms_role"); } catch(e){} setRole(null); };
   const [brand, setBrand] = useState("sotong");
   const [store, setStore] = useState("KSL");
@@ -234,6 +245,7 @@ export default function App() {
   const maxSafety = Math.max(...OVERVIEW.stores.map(s=>s.safety));
 
   const tabs = isAdmin ? [
+    { id:"live", label:"● LIVE 实时" },
     { id:"overview", label:"总览" },
     { id:"alerts", label:`Alerts${urgent>0?` 🚨${urgent}`:""}` },
     { id:"roster", label:"Roster" },
@@ -242,6 +254,7 @@ export default function App() {
     { id:"reviews", label:"Reviews" },
     { id:"log", label:"Update Log" },
   ] : [
+    { id:"live", label:"● LIVE 实时" },
     { id:"alerts", label:`紧急事项${urgent>0?` 🚨${urgent}`:""}` },
     { id:"sales", label:"达标程度" },
   ];
@@ -279,266 +292,271 @@ export default function App() {
 
       <div style={{ padding:"14px 18px", maxWidth:860 }}>
 
-        {brand !== "sotong" && <ComingSoon brand={brand} />}
-        {brand === "sotong" && (<>
+        {brand !== "sotong" && tab !== "live" && <ComingSoon brand={brand} />}
+        {(brand === "sotong" || tab === "live") && (<>
 
-        <div style={{ display:"flex", borderBottom:"1px solid #2a2520", marginBottom:14, overflowX:"auto" }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:"8px 14px", background:"transparent", cursor:"pointer", fontFamily:"monospace", fontSize:10, letterSpacing:2, textTransform:"uppercase", border:"none", marginBottom:-1, whiteSpace:"nowrap", borderBottom: tab===t.id ? `2px solid ${storeColors[store]}` : "2px solid transparent", color: tab===t.id ? storeColors[store] : "#4a4038" }}>{t.label}</button>
-          ))}
-        </div>
-
-
-        {isAdmin && tab==="overview" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>门店总览 · Cost & Profit</div>
-            <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginBottom:14, lineHeight:1.5 }}>{OVERVIEW.source}</div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
-              <StatCard label="5 店月销售合计" value={`RM ${(OVERVIEW.totalSales/1000).toFixed(0)}k`} sub="月均" color="#f0e8dc" />
-              <StatCard label="月净利合计" value={`RM ${(OVERVIEW.totalNetProfit/1000).toFixed(0)}k`} sub="扣 AM 后" color="#A8C5A0" />
-              <StatCard label="集团净利率" value={`${OVERVIEW.groupMargin}%`} sub="扣 AM 后" color="#A8C5A0" />
-              <StatCard label="活跃门店" value={OVERVIEW.activeStores} sub="A · B · C 级" color="#9FB8C8" />
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
-                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:12 }}>月均销售 (RM)</div>
-                {OVERVIEW.stores.map(s=>(<BarRow key={s.store} label={s.name} value={s.sales} display={`${(s.sales/1000).toFixed(0)}k`} max={maxSales} color={storeColors[s.store]} />))}
-              </div>
-              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
-                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:12 }}>净利率 % (扣 AM 后)</div>
-                {OVERVIEW.stores.map(s=>(<BarRow key={s.store} label={s.name} value={s.netMargin} display={`${s.netMargin}%`} max={26} color={marginColor(s.netMargin)} />))}
-              </div>
-              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
-                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:6 }}>员工占比 vs 占用占比 (% 销售)</div>
-                <div style={{ display:"flex", gap:14, marginBottom:10 }}>
-                  <span style={{ fontSize:9, color:"#9FB8C8", fontFamily:"monospace" }}>■ 员工</span>
-                  <span style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace" }}>■ 占用</span>
-                </div>
-                {OVERVIEW.stores.map(s=>(
-                  <div key={s.store} style={{ marginBottom:10 }}>
-                    <div style={{ fontSize:10, color:"#a89c8c", fontFamily:"monospace", marginBottom:3 }}>{s.name}</div>
-                    <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
-                      <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:2 }}><div style={{ height:"100%", width:`${s.staffPct/maxCostPct*100}%`, background:"#9FB8C8", borderRadius:2 }} /></div>
-                      <span style={{ fontSize:9, color:"#9FB8C8", fontFamily:"monospace", width:34, textAlign:"right" }}>{s.staffPct}%</span>
-                    </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:2 }}><div style={{ height:"100%", width:`${s.occPct/maxCostPct*100}%`, background:"#C8A97E", borderRadius:2 }} /></div>
-                      <span style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace", width:34, textAlign:"right" }}>{s.occPct}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
-                <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:4 }}>安全倍数 (月均 ÷ 损益平衡线)</div>
-                <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginBottom:12 }}>越高越安全 · 1.0 = 打平</div>
-                {OVERVIEW.stores.map(s=>(<BarRow key={s.store} label={s.name} value={s.safety} display={`${s.safety}x`} max={maxSafety} color={safetyColor(s.safety)} />))}
-              </div>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginTop:18 }}>
-              <StatCard label="Active Alerts" value={alerts.length} color={alerts.length>0?"#cc3333":"#A8C5A0"} />
-              <StatCard label="Avg Review" value="4.9 ⭐" color="#C8A97E" />
-              <StatCard label="Group Net Margin" value={`${OVERVIEW.groupMargin}%`} color="#A8C5A0" />
-              <StatCard label="Jun Target" value="RM 971K" color="#A8C5A0" />
-            </div>
+          <div style={{ display:"flex", borderBottom:"1px solid #2a2520", marginBottom:14, overflowX:"auto" }}>
+            {tabs.map(t => (
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:"8px 14px", background:"transparent", cursor:"pointer", fontFamily:"monospace", fontSize:10, letterSpacing:2, textTransform:"uppercase", border:"none", marginBottom:-1, whiteSpace:"nowrap", borderBottom: tab===t.id ? `2px solid ${t.id==="live"?"#A8C5A0":storeColors[store]}` : "2px solid transparent", color: tab===t.id ? (t.id==="live"?"#A8C5A0":storeColors[store]) : "#4a4038" }}>{t.label}</button>
+            ))}
           </div>
-        )}
 
-        {tab==="alerts" && (
-          <div>
-            {alerts.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"40px 20px", color:"#3a3530", fontFamily:"monospace" }}>
-                <div style={{ fontSize:32 }}>✓</div>
-                <div style={{ marginTop:8, fontSize:12 }}>All stores operating normally</div>
+          {tab==="live" && <Live />}
+
+          {brand === "sotong" && (<>
+
+          {isAdmin && tab==="overview" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:6 }}>门店总览 · Cost & Profit</div>
+              <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginBottom:14, lineHeight:1.5 }}>{OVERVIEW.source}</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
+                <StatCard label="5 店月销售合计" value={`RM ${(OVERVIEW.totalSales/1000).toFixed(0)}k`} sub="月均" color="#f0e8dc" />
+                <StatCard label="月净利合计" value={`RM ${(OVERVIEW.totalNetProfit/1000).toFixed(0)}k`} sub="扣 AM 后" color="#A8C5A0" />
+                <StatCard label="集团净利率" value={`${OVERVIEW.groupMargin}%`} sub="扣 AM 后" color="#A8C5A0" />
+                <StatCard label="活跃门店" value={OVERVIEW.activeStores} sub="A · B · C 级" color="#9FB8C8" />
               </div>
-            ) : (
-              <>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:16 }}>
-                  {[{ label:"Urgent", val:urgent, color:"#cc3333" },{ label:"Warning", val:warning, color:"#C8A97E" },{ label:"Stores", val:[...new Set(alerts.map(a=>a.store))].length, color:"#9FB8C8" }].map(s=>(
-                    <div key={s.label} style={{ background:"#1e1a16", borderRadius:3, padding:"10px 12px", border:"1px solid #2a2520" }}>
-                      <div style={{ fontSize:22, color:s.color, fontFamily:"monospace", fontWeight:"bold" }}>{s.val}</div>
-                      <div style={{ fontSize:8, color:"#4a4038", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                  <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:12 }}>月均销售 (RM)</div>
+                  {OVERVIEW.stores.map(s=>(<BarRow key={s.store} label={s.name} value={s.sales} display={`${(s.sales/1000).toFixed(0)}k`} max={maxSales} color={storeColors[s.store]} />))}
+                </div>
+                <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                  <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:12 }}>净利率 % (扣 AM 后)</div>
+                  {OVERVIEW.stores.map(s=>(<BarRow key={s.store} label={s.name} value={s.netMargin} display={`${s.netMargin}%`} max={26} color={marginColor(s.netMargin)} />))}
+                </div>
+                <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                  <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:6 }}>员工占比 vs 占用占比 (% 销售)</div>
+                  <div style={{ display:"flex", gap:14, marginBottom:10 }}>
+                    <span style={{ fontSize:9, color:"#9FB8C8", fontFamily:"monospace" }}>■ 员工</span>
+                    <span style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace" }}>■ 占用</span>
+                  </div>
+                  {OVERVIEW.stores.map(s=>(
+                    <div key={s.store} style={{ marginBottom:10 }}>
+                      <div style={{ fontSize:10, color:"#a89c8c", fontFamily:"monospace", marginBottom:3 }}>{s.name}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                        <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:2 }}><div style={{ height:"100%", width:`${s.staffPct/maxCostPct*100}%`, background:"#9FB8C8", borderRadius:2 }} /></div>
+                        <span style={{ fontSize:9, color:"#9FB8C8", fontFamily:"monospace", width:34, textAlign:"right" }}>{s.staffPct}%</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:2 }}><div style={{ height:"100%", width:`${s.occPct/maxCostPct*100}%`, background:"#C8A97E", borderRadius:2 }} /></div>
+                        <span style={{ fontSize:9, color:"#C8A97E", fontFamily:"monospace", width:34, textAlign:"right" }}>{s.occPct}%</span>
+                      </div>
                     </div>
                   ))}
                 </div>
-                {alerts.map((a,i)=><AlertCard key={i} alert={a} />)}
-              </>
-            )}
-          </div>
-        )}
+                <div style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px" }}>
+                  <div style={{ fontSize:11, color:"#d4c8bc", fontWeight:"bold", marginBottom:4 }}>安全倍数 (月均 ÷ 损益平衡线)</div>
+                  <div style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace", marginBottom:12 }}>越高越安全 · 1.0 = 打平</div>
+                  {OVERVIEW.stores.map(s=>(<BarRow key={s.store} label={s.name} value={s.safety} display={`${s.safety}x`} max={maxSafety} color={safetyColor(s.safety)} />))}
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginTop:18 }}>
+                <StatCard label="Active Alerts" value={alerts.length} color={alerts.length>0?"#cc3333":"#A8C5A0"} />
+                <StatCard label="Avg Review" value="4.9 ⭐" color="#C8A97E" />
+                <StatCard label="Group Net Margin" value={`${OVERVIEW.groupMargin}%`} color="#A8C5A0" />
+                <StatCard label="Jun Target" value="RM 971K" color="#A8C5A0" />
+              </div>
+            </div>
+          )}
 
-        {isAdmin && tab==="roster" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>{storeNames[store]} — June 2026</div>
-            {storeRoster.map((emp,i)=>(
-              <div key={i} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"12px 14px", marginBottom:8, opacity:emp.notes?.includes("RESIGNED")?0.5:1 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <Badge role={emp.role} />
-                    <span style={{ fontSize:13, color:"#d4c8bc" }}>{emp.name}</span>
-                    {emp.notes && <span style={{ fontSize:10, color:emp.notes.includes("RESIGNED")?"#cc3333":"#C8A97E", fontFamily:"monospace" }}>{emp.notes}</span>}
+          {tab==="alerts" && (
+            <div>
+              {alerts.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"40px 20px", color:"#3a3530", fontFamily:"monospace" }}>
+                  <div style={{ fontSize:32 }}>✓</div>
+                  <div style={{ marginTop:8, fontSize:12 }}>All stores operating normally</div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:16 }}>
+                    {[{ label:"Urgent", val:urgent, color:"#cc3333" },{ label:"Warning", val:warning, color:"#C8A97E" },{ label:"Stores", val:[...new Set(alerts.map(a=>a.store))].length, color:"#9FB8C8" }].map(s=>(
+                      <div key={s.label} style={{ background:"#1e1a16", borderRadius:3, padding:"10px 12px", border:"1px solid #2a2520" }}>
+                        <div style={{ fontSize:22, color:s.color, fontFamily:"monospace", fontWeight:"bold" }}>{s.val}</div>
+                        <div style={{ fontSize:8, color:"#4a4038", letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {alerts.map((a,i)=><AlertCard key={i} alert={a} />)}
+                </>
+              )}
+            </div>
+          )}
+
+          {isAdmin && tab==="roster" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>{storeNames[store]} — June 2026</div>
+              {storeRoster.map((emp,i)=>(
+                <div key={i} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"12px 14px", marginBottom:8, opacity:emp.notes?.includes("RESIGNED")?0.5:1 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <Badge role={emp.role} />
+                      <span style={{ fontSize:13, color:"#d4c8bc" }}>{emp.name}</span>
+                      {emp.notes && <span style={{ fontSize:10, color:emp.notes.includes("RESIGNED")?"#cc3333":"#C8A97E", fontFamily:"monospace" }}>{emp.notes}</span>}
+                    </div>
+                    {emp.work>0 && (
+                      <div style={{ display:"flex", gap:14 }}>
+                        {[["Work",emp.work,"#A8C5A0"],["Off",emp.off,"#6b5f52"],["ASST",emp.asst,"#c4a0c4"]].filter(([,v])=>v>0).map(([l,v,c])=>(
+                          <div key={l} style={{ textAlign:"center" }}>
+                            <div style={{ fontSize:15, color:c, fontFamily:"monospace", fontWeight:"bold" }}>{v}</div>
+                            <div style={{ fontSize:7, color:"#4a4038", letterSpacing:1, textTransform:"uppercase" }}>{l}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {emp.work>0 && (
-                    <div style={{ display:"flex", gap:14 }}>
-                      {[["Work",emp.work,"#A8C5A0"],["Off",emp.off,"#6b5f52"],["ASST",emp.asst,"#c4a0c4"]].filter(([,v])=>v>0).map(([l,v,c])=>(
-                        <div key={l} style={{ textAlign:"center" }}>
-                          <div style={{ fontSize:15, color:c, fontFamily:"monospace", fontWeight:"bold" }}>{v}</div>
-                          <div style={{ fontSize:7, color:"#4a4038", letterSpacing:1, textTransform:"uppercase" }}>{l}</div>
-                        </div>
-                      ))}
+                    <div style={{ display:"flex", gap:2, height:4, marginTop:10 }}>
+                      {Array.from({length:30}).map((_,d)=>(<div key={d} style={{ flex:1, borderRadius:1, background:d<emp.work?storeColors[store]:"#2a2520" }} />))}
                     </div>
                   )}
                 </div>
-                {emp.work>0 && (
-                  <div style={{ display:"flex", gap:2, height:4, marginTop:10 }}>
-                    {Array.from({length:30}).map((_,d)=>(<div key={d} style={{ flex:1, borderRadius:1, background:d<emp.work?storeColors[store]:"#2a2520" }} />))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {isAdmin && tab==="sales" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>Retail Sales — June 2026</div>
-            {sales.map(d=>{
-              const pct = d.actual ? Math.round(d.actual/d.target*100) : null;
-              const statusColor = !pct ? "#3a3530" : pct>=100 ? "#A8C5A0" : pct>=85 ? "#C8A97E" : "#cc3333";
-              const frac = d.actual ? d.actual/d.target : 0;
-              const segLabels = ["Day 1-10","Day 11-20","Day 21-30"];
-              return (
-                <div key={d.store} style={{ background:"#1e1a16", border:`1px solid ${store===d.store?storeColors[d.store]+"44":"#2a2520"}`, borderRadius:3, padding:"16px 18px", marginBottom:10 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap", marginBottom:16 }}>
-                    <div>
-                      <div style={{ fontSize:10, color:storeColors[d.store], fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:5 }}>{d.store} — {storeNames[d.store]}</div>
-                      <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
-                        <span style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:1 }}>TARGET</span>
-                        <span style={{ fontSize:23, color:"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>RM {d.target.toLocaleString()}</span>
+          {isAdmin && tab==="sales" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>Retail Sales — June 2026</div>
+              {sales.map(d=>{
+                const pct = d.actual ? Math.round(d.actual/d.target*100) : null;
+                const statusColor = !pct ? "#3a3530" : pct>=100 ? "#A8C5A0" : pct>=85 ? "#C8A97E" : "#cc3333";
+                const frac = d.actual ? d.actual/d.target : 0;
+                const segLabels = ["Day 1-10","Day 11-20","Day 21-30"];
+                return (
+                  <div key={d.store} style={{ background:"#1e1a16", border:`1px solid ${store===d.store?storeColors[d.store]+"44":"#2a2520"}`, borderRadius:3, padding:"16px 18px", marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12, flexWrap:"wrap", marginBottom:16 }}>
+                      <div>
+                        <div style={{ fontSize:10, color:storeColors[d.store], fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:5 }}>{d.store} — {storeNames[d.store]}</div>
+                        <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+                          <span style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:1 }}>TARGET</span>
+                          <span style={{ fontSize:23, color:"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>RM {d.target.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:1 }}>ACTUAL SALES</div>
+                        <div style={{ fontSize:30, color:statusColor, fontFamily:"monospace", fontWeight:"bold", lineHeight:1.15 }}>RM {d.actual.toLocaleString()}</div>
+                        <div style={{ fontSize:13, color:statusColor, fontFamily:"monospace", fontWeight:"bold" }}>{pct}% of target</div>
                       </div>
                     </div>
-                    <div style={{ textAlign:"right" }}>
-                      <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:1 }}>ACTUAL SALES</div>
-                      <div style={{ fontSize:30, color:statusColor, fontFamily:"monospace", fontWeight:"bold", lineHeight:1.15 }}>RM {d.actual.toLocaleString()}</div>
-                      <div style={{ fontSize:13, color:statusColor, fontFamily:"monospace", fontWeight:"bold" }}>{pct}% of target</div>
-                    </div>
-                  </div>
-                  <div style={{ display:"flex", gap:4 }}>
-                    {[0,1,2].map(seg=>{
-                      const segFill = Math.max(0, Math.min(100, (frac*3 - seg)*100));
-                      return (
-                        <div key={seg} style={{ flex:1 }}>
-                          <div style={{ height:10, background:"#2a2520", borderRadius:3, overflow:"hidden" }}>
-                            <div style={{ height:"100%", width:`${segFill}%`, background:statusColor, transition:"width 0.4s" }} />
+                    <div style={{ display:"flex", gap:4 }}>
+                      {[0,1,2].map(seg=>{
+                        const segFill = Math.max(0, Math.min(100, (frac*3 - seg)*100));
+                        return (
+                          <div key={seg} style={{ flex:1 }}>
+                            <div style={{ height:10, background:"#2a2520", borderRadius:3, overflow:"hidden" }}>
+                              <div style={{ height:"100%", width:`${segFill}%`, background:statusColor, transition:"width 0.4s" }} />
+                            </div>
+                            <div style={{ fontSize:7, color:"#4a4038", fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase", marginTop:4, textAlign:"center" }}>{segLabels[seg]}</div>
                           </div>
-                          <div style={{ fontSize:7, color:"#4a4038", fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase", marginTop:4, textAlign:"center" }}>{segLabels[seg]}</div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                    {pct!==null && pct < 85 && (<div style={{ fontSize:10, color:"#c87040", marginTop:8, fontFamily:"monospace" }}>⚠ RM {(d.target-d.actual).toLocaleString()} behind</div>)}
                   </div>
-                  {pct!==null && pct < 85 && (<div style={{ fontSize:10, color:"#c87040", marginTop:8, fontFamily:"monospace" }}>⚠ RM {(d.target-d.actual).toLocaleString()} behind</div>)}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
 
-        {!isAdmin && tab==="sales" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>达标程度 · Sales Achievement — June 2026</div>
-            {sales.map(d=>{
-              const pct = d.actual ? Math.round(d.actual/d.target*100) : null;
-              const c = !pct ? "#3a3530" : pct>=100 ? "#A8C5A0" : pct>=85 ? "#C8A97E" : "#cc3333";
-              const status = !pct ? "待更新" : pct>=100 ? "达标" : pct>=85 ? "接近" : "落后";
-              return (
-                <div key={d.store} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px", marginBottom:10 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
-                    <span style={{ fontSize:11, color:storeColors[d.store], fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase" }}>{d.store} — {storeNames[d.store]}</span>
-                    <span style={{ fontSize:22, color:c, fontFamily:"monospace", fontWeight:"bold" }}>{pct!==null?`${pct}%`:"—"}</span>
+          {!isAdmin && tab==="sales" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>达标程度 · Sales Achievement — June 2026</div>
+              {sales.map(d=>{
+                const pct = d.actual ? Math.round(d.actual/d.target*100) : null;
+                const c = !pct ? "#3a3530" : pct>=100 ? "#A8C5A0" : pct>=85 ? "#C8A97E" : "#cc3333";
+                const status = !pct ? "待更新" : pct>=100 ? "达标" : pct>=85 ? "接近" : "落后";
+                return (
+                  <div key={d.store} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px", marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                      <span style={{ fontSize:11, color:storeColors[d.store], fontFamily:"monospace", letterSpacing:1, textTransform:"uppercase" }}>{d.store} — {storeNames[d.store]}</span>
+                      <span style={{ fontSize:22, color:c, fontFamily:"monospace", fontWeight:"bold" }}>{pct!==null?`${pct}%`:"—"}</span>
+                    </div>
+                    <div style={{ height:8, background:"#2a2520", borderRadius:3 }}><div style={{ height:"100%", width:`${pct?Math.min(pct,100):0}%`, background:c, borderRadius:3 }} /></div>
+                    <div style={{ fontSize:10, color:c, fontFamily:"monospace", marginTop:6 }}>{status}</div>
                   </div>
-                  <div style={{ height:8, background:"#2a2520", borderRadius:3 }}><div style={{ height:"100%", width:`${pct?Math.min(pct,100):0}%`, background:c, borderRadius:3 }} /></div>
-                  <div style={{ fontSize:10, color:c, fontFamily:"monospace", marginTop:6 }}>{status}</div>
-                </div>
-              );
-            })}
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", marginTop:8 }}>仅显示达标程度;详细财务需管理员权限</div>
-          </div>
-        )}
+                );
+              })}
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", marginTop:8 }}>仅显示达标程度;详细财务需管理员权限</div>
+            </div>
+          )}
 
-        {isAdmin && tab==="online" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>Online Channels — June 2026</div>
-            {online.map(o=>{
-              const c = channelColors[o.channel] || TIKTOK_COLOR;
-              return (
-                <div key={o.channel} style={{ background:"#1e1a16", border:`1px solid #2a2520`, borderLeft:`3px solid ${c}`, borderRadius:3, padding:"14px 16px", marginBottom:10 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
-                    <span style={{ fontSize:13, color:c, fontFamily:"monospace", fontWeight:"bold", letterSpacing:1 }}>{o.channel}</span>
-                    <div style={{ textAlign:"right" }}>
-                      <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace" }}>TARGET</div>
-                      <div style={{ fontSize:15, color:"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>RM {o.target.toLocaleString()}</div>
+          {isAdmin && tab==="online" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>Online Channels — June 2026</div>
+              {online.map(o=>{
+                const c = channelColors[o.channel] || TIKTOK_COLOR;
+                return (
+                  <div key={o.channel} style={{ background:"#1e1a16", border:`1px solid #2a2520`, borderLeft:`3px solid ${c}`, borderRadius:3, padding:"14px 16px", marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:10 }}>
+                      <span style={{ fontSize:13, color:c, fontFamily:"monospace", fontWeight:"bold", letterSpacing:1 }}>{o.channel}</span>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace" }}>TARGET</div>
+                        <div style={{ fontSize:15, color:"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>RM {o.target.toLocaleString()}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                      <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:3 }} />
+                      <span style={{ fontSize:9, color:"#3a3530", fontFamily:"monospace" }}>待录入数据</span>
                     </div>
                   </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <div style={{ flex:1, height:6, background:"#2a2520", borderRadius:3 }} />
-                    <span style={{ fontSize:9, color:"#3a3530", fontFamily:"monospace" }}>待录入数据</span>
-                  </div>
-                </div>
-              );
-            })}
-            <div style={{ background:"#141210", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px", marginTop:4, display:"flex", justifyContent:"space-between" }}>
-              <span style={{ fontSize:10, color:"#6b5f52", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase" }}>Total Online</span>
-              <span style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace" }}>Target: RM {totalOnlineTarget.toLocaleString()}</span>
+                );
+              })}
+              <div style={{ background:"#141210", border:"1px solid #2a2520", borderRadius:3, padding:"14px 16px", marginTop:4, display:"flex", justifyContent:"space-between" }}>
+                <span style={{ fontSize:10, color:"#6b5f52", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase" }}>Total Online</span>
+                <span style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace" }}>Target: RM {totalOnlineTarget.toLocaleString()}</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {isAdmin && tab==="reviews" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>Google Reviews — 5 Outlets</div>
-            {[...reviews].sort((a,b)=>b.rating-a.rating).map((r,i)=>(
-              <div key={i} style={{ background: r.rating<4?"#1e1010":"#1e1a16", border: r.rating<4?"1px solid #8B2020":"1px solid #2a2520", borderLeft:`3px solid ${storeColors[r.store]||"#C8A97E"}`, borderRadius:3, padding:"12px 14px", marginBottom:8 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <div>
-                    <div style={{ fontSize:9, color:storeColors[r.store]||"#C8A97E", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase" }}>{r.store} — {storeNames[r.store] || r.store}</div>
-                    <div style={{ marginTop:6 }}><Stars rating={r.rating} /></div>
-                  </div>
-                  <div style={{ textAlign:"right" }}>
-                    <div style={{ fontSize:22, color:"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>{(r.total||0).toLocaleString()}</div>
-                    <div style={{ fontSize:7, color:"#4a4038", letterSpacing:1, textTransform:"uppercase" }}>reviews</div>
+          {isAdmin && tab==="reviews" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>Google Reviews — 5 Outlets</div>
+              {[...reviews].sort((a,b)=>b.rating-a.rating).map((r,i)=>(
+                <div key={i} style={{ background: r.rating<4?"#1e1010":"#1e1a16", border: r.rating<4?"1px solid #8B2020":"1px solid #2a2520", borderLeft:`3px solid ${storeColors[r.store]||"#C8A97E"}`, borderRadius:3, padding:"12px 14px", marginBottom:8 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div>
+                      <div style={{ fontSize:9, color:storeColors[r.store]||"#C8A97E", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase" }}>{r.store} — {storeNames[r.store] || r.store}</div>
+                      <div style={{ marginTop:6 }}><Stars rating={r.rating} /></div>
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontSize:22, color:"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>{(r.total||0).toLocaleString()}</div>
+                      <div style={{ fontSize:7, color:"#4a4038", letterSpacing:1, textTransform:"uppercase" }}>reviews</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {isAdmin && tab==="log" && (
-          <div>
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>更新日志 · Update Log — Current {VERSION}</div>
-            {UPDATE_LOG.map(rel=>(
-              <div key={rel.v} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderLeft:`3px solid ${rel.v===VERSION?"#A8C5A0":"#4a4038"}`, borderRadius:3, padding:"12px 16px", marginBottom:10 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
-                  <span style={{ fontSize:14, color:rel.v===VERSION?"#A8C5A0":"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>{rel.v}{rel.v===VERSION?"  ← current":""}</span>
-                  <span style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace" }}>{rel.date}</span>
-                </div>
-                {rel.changes.map((c,i)=>(
-                  <div key={i} style={{ display:"flex", gap:8, marginBottom:5 }}>
-                    <span style={{ color:"#C8A97E", fontFamily:"monospace", fontSize:11, flexShrink:0 }}>+</span>
-                    <span style={{ fontSize:11, color:"#c8b898", lineHeight:1.5 }}>{c}</span>
+          {isAdmin && tab==="log" && (
+            <div>
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", marginBottom:14 }}>更新日志 · Update Log — Current {VERSION}</div>
+              {UPDATE_LOG.map(rel=>(
+                <div key={rel.v} style={{ background:"#1e1a16", border:"1px solid #2a2520", borderLeft:`3px solid ${rel.v===VERSION?"#A8C5A0":"#4a4038"}`, borderRadius:3, padding:"12px 16px", marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
+                    <span style={{ fontSize:14, color:rel.v===VERSION?"#A8C5A0":"#d4c8bc", fontFamily:"monospace", fontWeight:"bold" }}>{rel.v}{rel.v===VERSION?" ← current":""}</span>
+                    <span style={{ fontSize:9, color:"#6b5f52", fontFamily:"monospace" }}>{rel.date}</span>
                   </div>
-                ))}
-              </div>
-            ))}
-            <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", margin:"18px 0 10px" }}>系统连接器 / 技能</div>
-            {SYSTEMS.map(sys=>(
-              <div key={sys.n} style={{ display:"flex", alignItems:"center", gap:10, background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"9px 14px", marginBottom:6 }}>
-                <span style={{ fontSize:12, color:"#C8A97E", fontFamily:"monospace", fontWeight:"bold", width:18 }}>{sys.n}</span>
-                <span style={{ fontSize:9, padding:"2px 7px", borderRadius:2, fontFamily:"monospace", letterSpacing:1, background: sys.type==="Connector"?"#9FB8C822":"#A8C5A022", color: sys.type==="Connector"?"#9FB8C8":"#A8C5A0", border:`1px solid ${sys.type==="Connector"?"#9FB8C844":"#A8C5A044"}` }}>{sys.type}</span>
-                <span style={{ fontSize:11, color:"#c8b898", fontFamily:"monospace" }}>{sys.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
+                  {rel.changes.map((c,i)=>(
+                    <div key={i} style={{ display:"flex", gap:8, marginBottom:5 }}>
+                      <span style={{ color:"#C8A97E", fontFamily:"monospace", fontSize:11, flexShrink:0 }}>+</span>
+                      <span style={{ fontSize:11, color:"#c8b898", lineHeight:1.5 }}>{c}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div style={{ fontSize:9, color:"#4a4038", fontFamily:"monospace", letterSpacing:2, textTransform:"uppercase", margin:"18px 0 10px" }}>系统连接器 / 技能</div>
+              {SYSTEMS.map(sys=>(
+                <div key={sys.n} style={{ display:"flex", alignItems:"center", gap:10, background:"#1e1a16", border:"1px solid #2a2520", borderRadius:3, padding:"9px 14px", marginBottom:6 }}>
+                  <span style={{ fontSize:12, color:"#C8A97E", fontFamily:"monospace", fontWeight:"bold", width:18 }}>{sys.n}</span>
+                  <span style={{ fontSize:9, padding:"2px 7px", borderRadius:2, fontFamily:"monospace", letterSpacing:1, background: sys.type==="Connector"?"#9FB8C822":"#A8C5A022", color: sys.type==="Connector"?"#9FB8C8":"#A8C5A0", border:`1px solid ${sys.type==="Connector"?"#9FB8C844":"#A8C5A044"}` }}>{sys.type}</span>
+                  <span style={{ fontSize:11, color:"#c8b898", fontFamily:"monospace" }}>{sys.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          </>)}
 
         </>)}
       </div>
