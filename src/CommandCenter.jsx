@@ -39,7 +39,7 @@ function normalize(json) {
     if (y && m && day && dim) pace = (day / dim) * 100;
   }
 
-  const stores = (json.ranking || []).map((r) => ({
+  const stores = (Array.isArray(json.ranking) ? json.ranking : []).map((r) => ({
     outlet: r.outlet, sales: r.sales ?? null, target: r.target ?? null,
     achievement: r.achievement ?? null, yesterday: r.yesterday ?? null,
   }));
@@ -51,8 +51,8 @@ function normalize(json) {
   const brands = {};
   Object.entries(json.brands || {}).forEach(([k, v]) => { brands[k] = normBrand(v); });
 
-  // submission 归一：v3 形态 {outlet,date,submitted:boolean}
-  const submission = json.submission
+  // submission 归一：v3 形态 {outlet,date,submitted:boolean}（全字段类型防御，非数组一律视为无数据）
+  const submission = Array.isArray(json.submission)
     ? json.submission.map((s) => ({ outlet: s.outlet, date: s.date, ok: s.submitted === true || /^(✅|validated|ok|submitted)$/i.test(String(s.status || "")), partial: /^(⚠|partial)$/i.test(String(s.status || "")) }))
     : null;
 
@@ -66,9 +66,9 @@ function normalize(json) {
     brands,
     stores,
     submission,
-    ceoFocusApi: json.ceoFocus || null,    // v3: API 侧候选事实
-    dailyTrend: json.dailyTrend || null,   // 连续下滑判断所需日序列（API v2.0）
-    captainFeed: json.captainFeed || null, // Form 切 production 后才有
+    ceoFocusApi: Array.isArray(json.ceoFocus) ? json.ceoFocus : null,          // v3: API 侧候选事实
+    dailyTrend: json.dailyTrend && typeof json.dailyTrend === "object" && !Array.isArray(json.dailyTrend) ? json.dailyTrend : null, // 日序列（API v2.0）
+    captainFeed: Array.isArray(json.captainFeed) ? json.captainFeed : null,    // Form 切 production 后才有（当前为占位对象，非数组）
   };
 }
 
@@ -288,9 +288,9 @@ export default function CommandCenter() {
             <div key={bc.key} style={{ background: "#141210", border: `1px solid ${C.border}`, borderRadius: 3, padding: "12px 14px", fontFamily: "monospace" }}>
               <div style={{ fontSize: 9, color: C.gold, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>{bc.name}</div>
               {[
-                ["Yesterday", bc.d && bc.d.yesterday != null ? fmtRM(bc.d.yesterday) : "— 待 API 字段"],
+                ["Yesterday", fmtRM(bc.d && bc.d.yesterday)],
                 ["MTD", fmtRM(bc.d && bc.d.sales)],
-                ["Last Month", bc.d && bc.d.lastMonth != null ? fmtRM(bc.d.lastMonth) : "— 待 API 字段"],
+                ["Last Month", fmtRM(bc.d && bc.d.lastMonth)],
               ].map(([l, v]) => (
                 <div key={l} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                   <span style={{ fontSize: 9, color: C.faint }}>{l}</span>
